@@ -1,0 +1,42 @@
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+
+# ----- pixi -----
+.pixi/
+
+# ----- Tooling caches -----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ----- Editor / OS -----
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# ----- Heavy artifacts (model weights, calibration, runs) -----
+*.pt
+*.pth
+*.safetensors
+*.bin
+calibration_cache/
+outputs/
+runs/
+wandb/
+mlruns/
+
+# ----- Local-only env files -----
+.env
+.env.local
+
+# Keep the paper PDF and pixi.lock (committed for reproducibility).
+!paper/
+!pixi.lock

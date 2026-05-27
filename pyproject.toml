@@ -1,0 +1,11 @@
+[project]
+name = "llvq-paper-reproduction"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.4.6",
+    "nvitop>=1.7.0",
+    "torch>=2.12.0",
+]
