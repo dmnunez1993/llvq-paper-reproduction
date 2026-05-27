@@ -310,16 +310,30 @@ class LLVQ:
         return self.db.all_vectors[idx]
 
 
-if __name__ == "__main__":
-    db = ShellDatabase()
-    db.build(M=8, max_coord=2, verbose=True)
+def demo(
+    M: int = 5,
+    max_coord: int = 2,
+    batch_vectors: int = 8,
+    input_scale: float = 3.0,
+    mode: str = "euclidean",
+    max_vectors_per_shell: int | None = None,
+    device: str | None = None,
+    verbose: bool = True,
+) -> None:
+    db = ShellDatabase(device=device)
+    db.build(
+        M=M,
+        max_coord=max_coord,
+        max_vectors_per_shell=max_vectors_per_shell,
+        verbose=verbose,
+    )
     print("device:", db.device)
     print("shell sizes:", db.shell_sizes())
     print("total vectors:", db.total_count)
 
     quantizer = LLVQ(db)
-    x = torch.randn(8, DIM, device=db.device) * 3.0
-    idx, recon, scores = quantizer.quantize(x)
+    x = torch.randn(batch_vectors, DIM, device=db.device) * input_scale
+    idx, recon, scores = quantizer.quantize(x, mode=mode)
     diff = x - recon
 
     print("indices:", idx)
@@ -329,3 +343,38 @@ if __name__ == "__main__":
     print("x - recon:", diff)
     print("per-vector l2 error:", diff.norm(dim=1))
     print("mean squared error:", diff.square().mean())
+
+
+def _argparse_main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="GPU shell LLVQ demo")
+    parser.add_argument("--M", type=int, default=5)
+    parser.add_argument("--max_coord", type=int, default=2)
+    parser.add_argument("--batch_vectors", type=int, default=8)
+    parser.add_argument("--input_scale", type=float, default=3.0)
+    parser.add_argument("--mode", choices=["euclidean", "angular"], default="euclidean")
+    parser.add_argument("--max_vectors_per_shell", type=int, default=None)
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--quiet", action="store_true")
+    args = parser.parse_args()
+
+    demo(
+        M=args.M,
+        max_coord=args.max_coord,
+        batch_vectors=args.batch_vectors,
+        input_scale=args.input_scale,
+        mode=args.mode,
+        max_vectors_per_shell=args.max_vectors_per_shell,
+        device=args.device,
+        verbose=not args.quiet,
+    )
+
+
+if __name__ == "__main__":
+    try:
+        import fire
+    except ImportError:
+        _argparse_main()
+    else:
+        fire.Fire(demo)
