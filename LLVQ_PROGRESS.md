@@ -209,6 +209,84 @@ optimal unquantized gain mse: 1.4358
 shape-gain mse:               1.4427
 ```
 
+### `llvq_true_leech.py`
+
+Paper-compatible Leech shell counts and rate accounting.
+
+- Computes exact Leech shell counts from the theta series:
+
+```text
+Theta_Leech(q) = E4(q)^3 - 720 Delta(q)
+```
+
+- Makes paper `M` meaningful for cardinality/rate.
+- Confirms the paper-like settings:
+
+```text
+Lambda_24(12) + 1 gain bit -> 48 bits/vector = 2 bits/dim
+Lambda_24(13)              -> 48 bits/vector = 2 bits/dim
+```
+
+- Includes a `TrueLeechIndex` placeholder for future shell -> class -> symmetry
+  indexing, but does not fake quantize/dequantize yet.
+
+Useful commands:
+
+```bash
+uv run python -u llvq_true_leech.py --M 12 --gain_bits 1
+uv run python -u llvq_true_leech.py --M 13 --gain_bits 0
+```
+
+### `llvq_paper_like_quantize.py`
+
+Working paper-rate shape-gain quantizer prototype.
+
+- Uses true Leech shell counts/rates from `llvq_true_leech.py`.
+- Uses the current fast approximate shape search for actual quantization.
+- Uses 1-bit chi-style gain quantization by default.
+- Reports both:
+  - true paper-compatible bits/vector,
+  - prototype represented vector count.
+
+This is the current best "does quantization" entry point, but it is still not a
+complete reproduction because the shape search is approximate and does not use
+true class-leader rank/unrank.
+
+Useful command:
+
+```bash
+uv run python -u llvq_paper_like_quantize.py \
+  --M 12 \
+  --gain_bits 1 \
+  --batch_vectors 2
+```
+
+### `llvq_true_class_leaders.py`
+
+True Table-2 class-leader rank/unrank for shells `m=2,3,4`.
+
+- Encodes the paper's printed class leaders and class cardinalities.
+- Validates class counts against the exact theta-series shell counts.
+- Implements class-level rank/unrank:
+
+```text
+global index -> shell -> class leader -> class-local index
+```
+
+- Provides canonical absolute-value leader vectors.
+
+Useful command:
+
+```bash
+uv run python -u llvq_true_class_leaders.py \
+  --max_shell 4 \
+  --indices 0,1103,1104,196559,196560,16969679,16969680
+```
+
+Important limitation: this is class-level rank/unrank only. It does not yet
+unrank the local Golay/permutation/sign symmetries inside each class into a
+specific Leech vector.
+
 ## Important Interpretations
 
 ### `batch_vectors`
