@@ -15,6 +15,7 @@ dist/
 .ruff_cache/
 .mypy_cache/
 .ipynb_checkpoints/
+.llvq_cache/
 
 # ----- Editor / OS -----
 .vscode/

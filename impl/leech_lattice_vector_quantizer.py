@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass
+from functools import lru_cache
 from math import ceil, factorial, log2, sqrt
+from pathlib import Path
+import pickle
 from random import Random
+from time import perf_counter
 from typing import Iterable, Sequence
 
 
 DIM = 24
 LATTICE_SCALE = 1.0 / sqrt(8.0)
+CLASS_LEADER_CACHE_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -128,11 +133,23 @@ class LeechLatticeVectorQuantizer:
     all codewords into memory.
     """
 
-    def __init__(self, max_shell: int = 4, leaders: Sequence[ClassLeader] | None = None):
+    def __init__(
+        self,
+        max_shell: int = 4,
+        leaders: Sequence[ClassLeader] | None = None,
+        cache_dir: str | Path | None = ".llvq_cache",
+        use_cache: bool = True,
+        verbose: bool = False,
+    ):
         if max_shell < 2:
             raise ValueError("max_shell must be at least 2")
         if leaders is None:
-            leaders = generate_class_leaders(max_shell)
+            leaders = generate_class_leaders(
+                max_shell,
+                cache_dir=cache_dir,
+                use_cache=use_cache,
+                verbose=verbose,
+            )
         available_shells = {row.shell for row in leaders}
         missing = [m for m in range(2, max_shell + 1) if m not in available_shells]
         if missing:
@@ -220,12 +237,12 @@ class LeechLatticeVectorQuantizer:
         local = self.decompose_local_index(ranked)
         return unrank_class_codeword(ranked.leader, local)
 
-    def dequantize(self, global_index: int) -> tuple[int, ...]:
+    def dequantize_lattice(self, global_index: int) -> tuple[int, ...]:
         return self.codeword(global_index)
 
-    def dequantize_lattice(self, global_index: int) -> tuple[float, ...]:
+    def dequantize(self, global_index: int) -> tuple[float, ...]:
         """Return the scaled Leech lattice vector in Lambda_24."""
-        return tuple(LATTICE_SCALE * value for value in self.dequantize(global_index))
+        return tuple(LATTICE_SCALE * value for value in self.dequantize_lattice(global_index))
 
     def encode_codeword(self, vector: Sequence[int]) -> int:
         """
@@ -398,12 +415,85 @@ def build_local_structure(
     )
 
 
-def generate_class_leaders(max_shell: int) -> tuple[ClassLeader, ...]:
+def generate_class_leaders(
+    max_shell: int,
+    cache_dir: str | Path | None = ".llvq_cache",
+    use_cache: bool = True,
+    verbose: bool = False,
+) -> tuple[ClassLeader, ...]:
     """Generate class leaders from the integer shell equation."""
     leaders = []
     for shell in range(2, max_shell + 1):
-        leaders.extend(generate_shell_class_leaders(shell))
+        if use_cache:
+            start = perf_counter()
+            shell_leaders, cache_status = generate_shell_class_leaders_cached(shell, cache_dir=cache_dir)
+            if verbose:
+                print(
+                    f"{cache_status} class leaders for shell m={shell}: "
+                    f"{len(shell_leaders)} classes in {perf_counter() - start:.3f}s",
+                    flush=True,
+                )
+        else:
+            start = perf_counter()
+            shell_leaders = generate_shell_class_leaders(shell)
+            if verbose:
+                print(
+                    f"generated class leaders for shell m={shell}: "
+                    f"{len(shell_leaders)} classes in {perf_counter() - start:.3f}s",
+                    flush=True,
+                )
+        leaders.extend(shell_leaders)
     return tuple(leaders)
+
+
+def generate_shell_class_leaders_cached(
+    shell: int,
+    cache_dir: str | Path | None = ".llvq_cache",
+) -> tuple[tuple[ClassLeader, ...], str]:
+    cache_key = None if cache_dir is None else str(Path(cache_dir))
+    return _generate_shell_class_leaders_cached(shell, cache_key)
+
+
+def _generate_shell_class_leaders_cached(
+    shell: int,
+    cache_dir: str | None,
+) -> tuple[tuple[ClassLeader, ...], str]:
+    cache_path = _class_leader_cache_path(cache_dir, shell)
+    if cache_path is not None and cache_path.exists():
+        try:
+            with cache_path.open("rb") as handle:
+                payload = pickle.load(handle)
+            if (
+                payload.get("version") == CLASS_LEADER_CACHE_VERSION
+                and payload.get("shell") == shell
+                and isinstance(payload.get("leaders"), tuple)
+            ):
+                return payload["leaders"], "loaded cached"
+        except (OSError, pickle.PickleError, AttributeError, EOFError):
+            pass
+
+    leaders = generate_shell_class_leaders(shell)
+    if cache_path is not None:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        with tmp_path.open("wb") as handle:
+            pickle.dump(
+                {
+                    "version": CLASS_LEADER_CACHE_VERSION,
+                    "shell": shell,
+                    "leaders": leaders,
+                },
+                handle,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        tmp_path.replace(cache_path)
+    return leaders, "generated"
+
+
+def _class_leader_cache_path(cache_dir: str | None, shell: int) -> Path | None:
+    if cache_dir is None:
+        return None
+    return Path(cache_dir) / f"class_leaders_v{CLASS_LEADER_CACHE_VERSION}_shell{shell}.pkl"
 
 
 def generate_shell_class_leaders(shell: int) -> tuple[ClassLeader, ...]:
@@ -819,6 +909,7 @@ def format_float_vector(vector: Sequence[float] | None, digits: int = 4) -> tupl
     return tuple(round(value, digits) for value in vector)
 
 
+@lru_cache(maxsize=1)
 def extended_golay_codewords() -> tuple[tuple[int, ...], ...]:
     """
     Extended binary Golay code G24 in lexicographic order.
