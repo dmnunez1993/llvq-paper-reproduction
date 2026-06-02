@@ -309,6 +309,8 @@ class LeechLatticeVectorQuantizer:
 
         if best_codeword is None:
             raise RuntimeError("no Leech candidate found")
+
+        print(f"best score {best_score:.6f} for codeword {best_codeword}")
         return self.encode_codeword(best_codeword)
 
     def quantize_exhaustive(self, vector: Sequence[float], max_candidates: int = 1_000_000) -> int:
